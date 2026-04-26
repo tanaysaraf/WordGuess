@@ -124,6 +124,25 @@
       font-size: 14px;
       margin: 0 0 16px;
     }
+    .stat-row {
+      display: flex;
+      justify-content: center;
+      gap: 16px;
+      align-items: center;
+      margin: 0 0 16px;
+      color: var(--muted);
+      font-size: 14px;
+    }
+    .stat-row .timer {
+      font-family: "SF Mono", Menlo, Consolas, monospace;
+      font-weight: 700;
+      color: var(--text);
+      background: var(--card-hi);
+      padding: 4px 10px;
+      border-radius: 6px;
+      letter-spacing: 1px;
+    }
+    .stat-row .sep { opacity: 0.4; }
     .row {
       display: grid;
       grid-template-columns: 30px 1fr 50px 50px;
@@ -231,7 +250,11 @@
     </section>
 
     <section id="game" class="card" hidden>
-      <p id="attempts" class="attempts"></p>
+      <div class="stat-row">
+        <span id="attempts">Attempts remaining: 8 / 8</span>
+        <span class="sep">|</span>
+        <span class="timer" id="timer">00:00</span>
+      </div>
       <div id="history"></div>
       <div class="guess-row">
         <input type="text" id="guess-input" maxlength="4" autocomplete="off" placeholder="GUESS" />
@@ -244,8 +267,11 @@
 
   <script type="py">
 import random
+import time
 from pyodide.http import open_url
+from pyodide.ffi import create_proxy
 from pyscript import document, when
+from js import setInterval, clearInterval
 
 WORD_LENGTH = 4
 MAX_ATTEMPTS = 8
@@ -322,8 +348,35 @@ class State:
     secret = ""
     attempts = 0
     active = False
+    start_time = 0.0
+    final_elapsed = 0
+    timer_id = None
 
 state = State()
+
+def fmt_time(seconds):
+    seconds = int(seconds)
+    return f"{seconds // 60:02d}:{seconds % 60:02d}"
+
+def tick(*_args):
+    if not state.active:
+        return
+    elapsed = time.time() - state.start_time
+    document.getElementById("timer").textContent = fmt_time(elapsed)
+
+_tick_proxy = create_proxy(tick)
+
+def start_timer():
+    stop_timer()
+    state.start_time = time.time()
+    state.final_elapsed = 0
+    document.getElementById("timer").textContent = "00:00"
+    state.timer_id = setInterval(_tick_proxy, 1000)
+
+def stop_timer():
+    if state.timer_id is not None:
+        clearInterval(state.timer_id)
+        state.timer_id = None
 
 def score_guess(secret, guess):
     greens = 0
@@ -367,17 +420,21 @@ def add_history_row(guess, greens, yellows):
 
 def end_game(won):
     state.active = False
+    state.final_elapsed = time.time() - state.start_time
+    stop_timer()
+    document.getElementById("timer").textContent = fmt_time(state.final_elapsed)
     document.getElementById("guess-input").disabled = True
     document.getElementById("guess-btn").disabled = True
+    elapsed_str = fmt_time(state.final_elapsed)
     if won:
         tries = state.attempts
         show_message(
-            f"You won! Got it in {tries} {'try' if tries == 1 else 'tries'}.",
+            f"You won in {elapsed_str}! Got it in {tries} {'try' if tries == 1 else 'tries'}.",
             "success",
         )
     else:
         show_message(
-            f"Out of attempts. The word was '{state.secret.upper()}'.",
+            f"Out of attempts after {elapsed_str}. The word was '{state.secret.upper()}'.",
             "fail",
         )
 
@@ -430,6 +487,7 @@ def on_start(event):
     document.getElementById("guess-btn").disabled = False
     hide_message()
     update_attempts()
+    start_timer()
     document.getElementById("guess-input").focus()
 
 @when("click", "#guess-btn")
@@ -466,6 +524,9 @@ def submit_guess():
 
 @when("click", "#new-btn")
 def on_new(event):
+    state.active = False
+    stop_timer()
+    document.getElementById("timer").textContent = "00:00"
     document.getElementById("game").hidden = True
     document.getElementById("setup").hidden = False
     document.getElementById("secret-input").value = ""
