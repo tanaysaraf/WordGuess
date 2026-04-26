@@ -1,0 +1,477 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>4-Letter Word Guess</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="stylesheet" href="https://pyscript.net/releases/2024.11.1/core.css" />
+  <script type="module" src="https://pyscript.net/releases/2024.11.1/core.js"></script>
+  <style>
+    :root {
+      --bg: #1e1e2e;
+      --card: #2a2a3d;
+      --card-hi: #3a3a55;
+      --text: #f5f5f5;
+      --muted: #9999aa;
+      --accent: #7f5af0;
+      --accent-hi: #6d4adf;
+      --green: #2cb67d;
+      --yellow: #f4c430;
+      --red: #ff6b6b;
+    }
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0;
+      padding: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+      min-height: 100vh;
+    }
+    main {
+      max-width: 480px;
+      margin: 0 auto;
+      padding: 32px 20px 80px;
+    }
+    h1 {
+      font-size: 28px;
+      font-weight: 700;
+      text-align: center;
+      margin: 16px 0 8px;
+    }
+    .subtitle {
+      text-align: center;
+      color: var(--muted);
+      font-size: 14px;
+      margin-bottom: 24px;
+    }
+    .card {
+      background: var(--card);
+      border-radius: 14px;
+      padding: 24px;
+    }
+    .field-label {
+      font-size: 13px;
+      color: var(--muted);
+      margin-bottom: 8px;
+    }
+    .modes {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      margin-bottom: 20px;
+    }
+    .modes label {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      cursor: pointer;
+      padding: 10px 12px;
+      border-radius: 8px;
+      transition: background .15s;
+    }
+    .modes label:hover { background: var(--card-hi); }
+    .modes input[type=radio] { accent-color: var(--accent); }
+    input[type=text], input[type=password] {
+      width: 100%;
+      padding: 12px 14px;
+      font-size: 18px;
+      font-weight: 600;
+      letter-spacing: 4px;
+      text-align: center;
+      background: var(--card-hi);
+      color: var(--text);
+      border: 2px solid transparent;
+      border-radius: 8px;
+      outline: none;
+      text-transform: uppercase;
+      font-family: "SF Mono", Menlo, Consolas, monospace;
+    }
+    input[type=text]:focus, input[type=password]:focus { border-color: var(--accent); }
+    .btn {
+      display: inline-block;
+      width: 100%;
+      padding: 12px 18px;
+      font-size: 15px;
+      font-weight: 700;
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: background .15s, transform .05s;
+      margin-top: 16px;
+    }
+    .btn:hover:not(:disabled) { background: var(--accent-hi); }
+    .btn:active:not(:disabled) { transform: scale(.98); }
+    .btn:disabled { background: var(--card-hi); color: var(--muted); cursor: not-allowed; }
+    .btn.secondary {
+      background: var(--card-hi);
+      margin-top: 12px;
+    }
+    .btn.secondary:hover:not(:disabled) { background: #4a4a6a; }
+    .status {
+      text-align: center;
+      font-size: 12px;
+      color: var(--muted);
+      margin-top: 12px;
+    }
+    .status.ready { color: var(--green); }
+    .status.warn { color: var(--yellow); }
+    .attempts {
+      text-align: center;
+      color: var(--muted);
+      font-size: 14px;
+      margin: 0 0 16px;
+    }
+    .row {
+      display: grid;
+      grid-template-columns: 30px 1fr 50px 50px;
+      gap: 8px;
+      align-items: center;
+      margin: 8px 0;
+    }
+    .row .num { text-align: right; color: var(--muted); font-size: 14px; }
+    .row .word {
+      background: var(--card-hi);
+      padding: 8px;
+      border-radius: 6px;
+      text-align: center;
+      font-family: "SF Mono", Menlo, Consolas, monospace;
+      font-weight: 700;
+      font-size: 18px;
+      letter-spacing: 4px;
+    }
+    .row .green, .row .yellow {
+      padding: 8px;
+      border-radius: 6px;
+      text-align: center;
+      font-weight: 700;
+      font-size: 16px;
+    }
+    .row .green { background: var(--green); color: #fff; }
+    .row .yellow { background: var(--yellow); color: #1e1e2e; }
+    .guess-row { display: flex; gap: 8px; margin-top: 16px; }
+    .guess-row input { flex: 1; }
+    .guess-row .btn { width: auto; margin-top: 0; padding: 12px 22px; }
+    .message {
+      text-align: center;
+      padding: 12px;
+      border-radius: 8px;
+      margin: 16px 0 0;
+      font-weight: 600;
+      display: none;
+    }
+    .message.show { display: block; }
+    .message.success { background: rgba(44, 182, 125, 0.18); color: var(--green); }
+    .message.fail    { background: rgba(255, 107, 107, 0.18); color: var(--red); }
+    .message.warn    { background: rgba(244, 196, 48, 0.18); color: var(--yellow); }
+    .help {
+      margin-top: 24px;
+      font-size: 12px;
+      color: var(--muted);
+      line-height: 1.6;
+    }
+    .help b { color: var(--text); }
+    .pip {
+      display: inline-block;
+      width: 14px;
+      height: 14px;
+      border-radius: 3px;
+      vertical-align: middle;
+      margin: 0 2px;
+    }
+    .pip.g { background: var(--green); }
+    .pip.y { background: var(--yellow); }
+    #loading {
+      text-align: center;
+      padding: 48px 0;
+      color: var(--muted);
+    }
+    .spinner {
+      display: inline-block;
+      width: 24px;
+      height: 24px;
+      border: 3px solid var(--card-hi);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.9s linear infinite;
+      margin-right: 8px;
+      vertical-align: middle;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>4-Letter Word Guess</h1>
+    <p class="subtitle">8 chances. <span class="pip g"></span> = right letter, right spot. <span class="pip y"></span> = right letter, wrong spot.</p>
+
+    <div id="loading"><span class="spinner"></span>Loading word list...</div>
+
+    <section id="setup" class="card" hidden>
+      <div class="field-label">Choose a mode</div>
+      <div class="modes">
+        <label><input type="radio" name="mode" value="single" checked /> Single player (random word)</label>
+        <label><input type="radio" name="mode" value="two" /> Two players (I'll set the word)</label>
+      </div>
+
+      <div id="secret-row" hidden>
+        <div class="field-label">Secret 4-letter word</div>
+        <input type="password" id="secret-input" maxlength="4" autocomplete="off" />
+      </div>
+
+      <button id="start-btn" class="btn">Start Game</button>
+      <div id="status" class="status"></div>
+
+      <div class="help">
+        <b>How to play:</b><br />
+        Pick a mode and hit Start. You get 8 guesses. After each guess we show two numbers — green for letters in the right spot, yellow for letters in the word but wrong spot.
+      </div>
+    </section>
+
+    <section id="game" class="card" hidden>
+      <p id="attempts" class="attempts"></p>
+      <div id="history"></div>
+      <div class="guess-row">
+        <input type="text" id="guess-input" maxlength="4" autocomplete="off" placeholder="GUESS" />
+        <button id="guess-btn" class="btn">Guess</button>
+      </div>
+      <div id="message" class="message"></div>
+      <button id="new-btn" class="btn secondary">New Game</button>
+    </section>
+  </main>
+
+  <script type="py">
+import random
+from pyodide.http import open_url
+from pyscript import document, when
+
+WORD_LENGTH = 4
+MAX_ATTEMPTS = 8
+
+# Curated common-word pool for nice single-player picks.
+COMMON = {
+    "able","acid","aged","also","area","army","away","baby","back","ball","band",
+    "bank","base","bath","bear","beat","been","beer","bell","belt","best","bird",
+    "blue","boat","body","bomb","bond","bone","book","boom","born","boss","both",
+    "bowl","bulk","burn","bush","busy","call","calm","came","camp","card","care",
+    "case","cash","cast","cell","chat","chip","city","club","coal","coat","code",
+    "cold","come","cook","cool","cope","copy","core","cost","crew","crop","dark",
+    "data","date","dawn","days","dead","deal","dear","debt","deep","deny","desk",
+    "dial","diet","disc","disk","does","done","door","dose","down","draw","drew",
+    "drop","drug","dual","duke","dust","duty","each","earn","ease","east","easy",
+    "edge","else","even","ever","evil","exit","face","fact","fail","fair","fall",
+    "farm","fart","fast","fate","fear","feed","feel","feet","fell","felt","file",
+    "fill","film","find","fine","fire","firm","fish","five","flag","flat","flew",
+    "flow","food","foot","ford","form","fort","four","free","from","fuel","full",
+    "fund","gain","game","gate","gave","gear","gene","gift","girl","give","glad",
+    "goal","goes","gold","golf","gone","good","gray","grew","grey","grow","gulf",
+    "hair","half","hall","hand","hang","hard","harm","hate","have","head","hear",
+    "heat","held","hell","help","here","hero","high","hill","hint","hire","hold",
+    "hole","holy","home","hope","host","hour","huge","hung","hunt","hurt","idea",
+    "inch","into","iron","item","jack","jane","jean","john","join","jump","jury",
+    "just","keen","keep","kept","kick","kill","kind","king","knee","knew","know",
+    "lack","lady","laid","lake","land","lane","last","late","lead","left","less",
+    "life","lift","like","line","link","list","live","load","loan","lock","logo",
+    "long","look","lord","lose","loss","lost","love","luck","made","mail","main",
+    "make","male","many","mark","mass","matt","meal","mean","meat","meet","menu",
+    "mere","mike","mile","milk","mill","mind","mine","miss","mode","mood","moon",
+    "more","most","move","much","must","name","navy","near","neck","need","news",
+    "next","nice","nick","nine","none","nope","nose","note","okay","once","only",
+    "onto","open","oral","over","pace","pack","page","paid","pain","pair","palm",
+    "park","part","pass","past","path","peak","pick","pink","pipe","plan","play",
+    "plot","plug","plus","poll","pool","poor","port","post","pour","pull","pure",
+    "push","quiz","race","rail","rain","rank","rare","rate","read","real","rear",
+    "rely","rent","rest","rice","rich","ride","ring","rise","risk","road","rock",
+    "role","roll","roof","room","root","rose","rule","rush","ruth","safe","said",
+    "sake","sale","salt","same","sand","save","seat","seed","seek","seem","seen",
+    "self","sell","send","sent","sept","ship","shop","shot","show","shut","sick",
+    "side","sign","site","size","skin","slip","slow","snow","soft","soil","sold",
+    "sole","some","song","soon","sort","soul","spot","star","stay","step","stop",
+    "such","suit","sure","take","tale","talk","tall","tank","tape","task","team",
+    "tech","tell","tend","term","test","text","than","that","them","then","they",
+    "thin","this","thus","till","time","tiny","told","toll","tone","tony","took",
+    "tool","tour","town","tree","trip","true","tune","turn","twin","type","unit",
+    "upon","used","user","uses","vary","vast","very","vibe","vice","view","vote",
+    "wage","wait","wake","walk","wall","want","ward","warm","wash","wave","ways",
+    "weak","wear","week","well","went","were","west","what","when","whom","wide",
+    "wife","wild","will","wind","wine","wing","wire","wise","wish","with","wood",
+    "word","wore","work","worn","yard","yeah","year","your","zero","zone","zoom",
+}
+
+def load_words():
+    text = open_url("./words4.txt").read()
+    return {
+        w.strip().lower()
+        for w in text.splitlines()
+        if len(w.strip()) == WORD_LENGTH and w.strip().isalpha()
+    }
+
+VALID_WORDS = load_words()
+PICK_POOL = sorted(COMMON & VALID_WORDS) or sorted(VALID_WORDS) or sorted(COMMON)
+
+# Hide loader, show setup
+document.getElementById("loading").hidden = True
+document.getElementById("setup").hidden = False
+status_el = document.getElementById("status")
+status_el.textContent = f"Word list ready ({len(VALID_WORDS):,} valid 4-letter words)."
+status_el.className = "status ready"
+
+class State:
+    secret = ""
+    attempts = 0
+    active = False
+
+state = State()
+
+def score_guess(secret, guess):
+    greens = 0
+    s_rem, g_rem = [], []
+    for s, g in zip(secret, guess):
+        if s == g:
+            greens += 1
+        else:
+            s_rem.append(s)
+            g_rem.append(g)
+    yellows = 0
+    for g in g_rem:
+        if g in s_rem:
+            yellows += 1
+            s_rem.remove(g)
+    return greens, yellows
+
+def show_message(text, kind=""):
+    el = document.getElementById("message")
+    el.textContent = text
+    el.className = "message show " + kind if kind else "message show"
+
+def hide_message():
+    document.getElementById("message").className = "message"
+
+def update_attempts():
+    remaining = MAX_ATTEMPTS - state.attempts
+    document.getElementById("attempts").textContent = f"Attempts remaining: {remaining} / {MAX_ATTEMPTS}"
+
+def add_history_row(guess, greens, yellows):
+    history = document.getElementById("history")
+    row = document.createElement("div")
+    row.className = "row"
+    row.innerHTML = (
+        f'<span class="num">{state.attempts}.</span>'
+        f'<span class="word">{guess.upper()}</span>'
+        f'<span class="green">{greens}</span>'
+        f'<span class="yellow">{yellows}</span>'
+    )
+    history.appendChild(row)
+
+def end_game(won):
+    state.active = False
+    document.getElementById("guess-input").disabled = True
+    document.getElementById("guess-btn").disabled = True
+    if won:
+        tries = state.attempts
+        show_message(
+            f"You won! Got it in {tries} {'try' if tries == 1 else 'tries'}.",
+            "success",
+        )
+    else:
+        show_message(
+            f"Out of attempts. The word was '{state.secret.upper()}'.",
+            "fail",
+        )
+
+def clean_input(value):
+    return "".join(c for c in value if c.isalpha())[:WORD_LENGTH].upper()
+
+@when("change", "input[name=mode]")
+def on_mode_change(event):
+    mode = document.querySelector("input[name=mode]:checked").value
+    document.getElementById("secret-row").hidden = mode == "single"
+
+@when("input", "#secret-input")
+def on_secret_input(event):
+    el = event.target
+    cleaned = clean_input(el.value)
+    if el.value != cleaned:
+        el.value = cleaned
+
+@when("input", "#guess-input")
+def on_guess_input(event):
+    el = event.target
+    cleaned = clean_input(el.value)
+    if el.value != cleaned:
+        el.value = cleaned
+
+@when("click", "#start-btn")
+def on_start(event):
+    mode = document.querySelector("input[name=mode]:checked").value
+    if mode == "single":
+        if not PICK_POOL:
+            show_message("Word list is empty.", "fail")
+            return
+        word = random.choice(PICK_POOL)
+    else:
+        word = document.getElementById("secret-input").value.strip().lower()
+        if len(word) != WORD_LENGTH or not word.isalpha():
+            show_message("Please enter a 4-letter word.", "warn")
+            return
+        if word not in VALID_WORDS:
+            show_message(f"'{word.upper()}' isn't in the dictionary.", "warn")
+            return
+    state.secret = word
+    state.attempts = 0
+    state.active = True
+    document.getElementById("setup").hidden = True
+    document.getElementById("game").hidden = False
+    document.getElementById("history").innerHTML = ""
+    document.getElementById("guess-input").value = ""
+    document.getElementById("guess-input").disabled = False
+    document.getElementById("guess-btn").disabled = False
+    hide_message()
+    update_attempts()
+    document.getElementById("guess-input").focus()
+
+@when("click", "#guess-btn")
+def on_guess_btn(event):
+    submit_guess()
+
+@when("keydown", "#guess-input")
+def on_guess_keydown(event):
+    if event.key == "Enter":
+        submit_guess()
+        event.preventDefault()
+
+def submit_guess():
+    if not state.active:
+        return
+    inp = document.getElementById("guess-input")
+    guess = inp.value.strip().lower()
+    if len(guess) != WORD_LENGTH or not guess.isalpha():
+        show_message("Type a 4-letter word.", "warn")
+        return
+    if guess not in VALID_WORDS:
+        show_message(f"'{guess.upper()}' isn't in the dictionary.", "warn")
+        return
+    hide_message()
+    g, y = score_guess(state.secret, guess)
+    state.attempts += 1
+    add_history_row(guess, g, y)
+    inp.value = ""
+    update_attempts()
+    if guess == state.secret:
+        end_game(True)
+    elif state.attempts >= MAX_ATTEMPTS:
+        end_game(False)
+
+@when("click", "#new-btn")
+def on_new(event):
+    document.getElementById("game").hidden = True
+    document.getElementById("setup").hidden = False
+    document.getElementById("secret-input").value = ""
+    document.getElementById("history").innerHTML = ""
+    hide_message()
+    on_mode_change(None)
+  </script>
+</body>
+</html>
