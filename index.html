@@ -219,6 +219,16 @@
       vertical-align: middle;
     }
     @keyframes spin { to { transform: rotate(360deg); } }
+
+    #confetti {
+      position: fixed;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      z-index: 9999;
+      display: none;
+    }
   </style>
 </head>
 <body>
@@ -246,6 +256,8 @@
       <div class="help">
         <b>How to play:</b><br />
         Pick a mode and hit Start. You get 8 guesses. After each guess we show two numbers — green for letters in the right spot, yellow for letters in the word but wrong spot.
+        <br /><br />
+        <b>Word rules:</b> all 4 letters must be different (e.g. <i>BEET</i> isn't allowed), and no proper nouns (names, places).
       </div>
     </section>
 
@@ -265,77 +277,120 @@
     </section>
   </main>
 
+  <canvas id="confetti"></canvas>
+
+  <script>
+    // Lightweight confetti / firework burst — pure canvas, no dependencies.
+    window.fireConfetti = function (durationMs) {
+      durationMs = durationMs || 3000;
+      const canvas = document.getElementById("confetti");
+      const dpr = window.devicePixelRatio || 1;
+      const w = window.innerWidth;
+      const h = window.innerHeight;
+      canvas.style.display = "block";
+      canvas.width = w * dpr;
+      canvas.height = h * dpr;
+      const ctx = canvas.getContext("2d");
+      ctx.scale(dpr, dpr);
+
+      const colors = ["#7f5af0", "#2cb67d", "#f4c430", "#ff6b6b", "#6dd3ff", "#ff8ad6"];
+      const particles = [];
+
+      function burst(cx, cy, count) {
+        for (let i = 0; i < count; i++) {
+          const angle = Math.random() * Math.PI * 2;
+          const speed = 3 + Math.random() * 7;
+          particles.push({
+            x: cx,
+            y: cy,
+            vx: Math.cos(angle) * speed,
+            vy: Math.sin(angle) * speed - 3,
+            size: 4 + Math.random() * 5,
+            color: colors[Math.floor(Math.random() * colors.length)],
+            rot: Math.random() * Math.PI * 2,
+            vrot: (Math.random() - 0.5) * 0.35,
+            life: 1,
+            decay: 0.005 + Math.random() * 0.008,
+          });
+        }
+      }
+
+      // Multiple staggered bursts for a fireworks feel.
+      const cx = w / 2;
+      const cy = h * 0.45;
+      burst(cx, cy, 70);
+      setTimeout(() => burst(w * 0.25, h * 0.4, 60), 250);
+      setTimeout(() => burst(w * 0.75, h * 0.4, 60), 450);
+      setTimeout(() => burst(cx, h * 0.55, 80), 700);
+      setTimeout(() => burst(w * 0.4, h * 0.35, 50), 950);
+      setTimeout(() => burst(w * 0.6, h * 0.35, 50), 1200);
+
+      const start = performance.now();
+      function frame(now) {
+        const elapsed = now - start;
+        ctx.clearRect(0, 0, w, h);
+
+        for (const p of particles) {
+          p.vy += 0.18; // gravity
+          p.vx *= 0.99; // air drag
+          p.x += p.vx;
+          p.y += p.vy;
+          p.rot += p.vrot;
+          p.life -= p.decay;
+
+          if (p.life <= 0 || p.y > h + 60) continue;
+
+          ctx.save();
+          ctx.translate(p.x, p.y);
+          ctx.rotate(p.rot);
+          ctx.fillStyle = p.color;
+          ctx.globalAlpha = Math.max(0, Math.min(1, p.life));
+          ctx.fillRect(-p.size / 2, -p.size / 2, p.size, p.size * 1.6);
+          ctx.restore();
+        }
+
+        const stillAlive = particles.some((p) => p.life > 0 && p.y < h + 60);
+        if (elapsed < durationMs || stillAlive) {
+          requestAnimationFrame(frame);
+        } else {
+          ctx.clearRect(0, 0, w, h);
+          canvas.style.display = "none";
+        }
+      }
+      requestAnimationFrame(frame);
+    };
+  </script>
+
   <script type="py">
 import random
 import time
 from pyodide.http import open_url
 from pyodide.ffi import create_proxy
 from pyscript import document, when
-from js import setInterval, clearInterval
+from js import setInterval, clearInterval, confirm as js_confirm, fireConfetti
 
 WORD_LENGTH = 4
 MAX_ATTEMPTS = 8
+BONUS_ATTEMPTS = 2
 
-# Curated common-word pool for nice single-player picks.
-COMMON = {
-    "able","acid","aged","also","area","army","away","baby","back","ball","band",
-    "bank","base","bath","bear","beat","been","beer","bell","belt","best","bird",
-    "blue","boat","body","bomb","bond","bone","book","boom","born","boss","both",
-    "bowl","bulk","burn","bush","busy","call","calm","came","camp","card","care",
-    "case","cash","cast","cell","chat","chip","city","club","coal","coat","code",
-    "cold","come","cook","cool","cope","copy","core","cost","crew","crop","dark",
-    "data","date","dawn","days","dead","deal","dear","debt","deep","deny","desk",
-    "dial","diet","disc","disk","does","done","door","dose","down","draw","drew",
-    "drop","drug","dual","duke","dust","duty","each","earn","ease","east","easy",
-    "edge","else","even","ever","evil","exit","face","fact","fail","fair","fall",
-    "farm","fart","fast","fate","fear","feed","feel","feet","fell","felt","file",
-    "fill","film","find","fine","fire","firm","fish","five","flag","flat","flew",
-    "flow","food","foot","ford","form","fort","four","free","from","fuel","full",
-    "fund","gain","game","gate","gave","gear","gene","gift","girl","give","glad",
-    "goal","goes","gold","golf","gone","good","gray","grew","grey","grow","gulf",
-    "hair","half","hall","hand","hang","hard","harm","hate","have","head","hear",
-    "heat","held","hell","help","here","hero","high","hill","hint","hire","hold",
-    "hole","holy","home","hope","host","hour","huge","hung","hunt","hurt","idea",
-    "inch","into","iron","item","jack","jane","jean","john","join","jump","jury",
-    "just","keen","keep","kept","kick","kill","kind","king","knee","knew","know",
-    "lack","lady","laid","lake","land","lane","last","late","lead","left","less",
-    "life","lift","like","line","link","list","live","load","loan","lock","logo",
-    "long","look","lord","lose","loss","lost","love","luck","made","mail","main",
-    "make","male","many","mark","mass","matt","meal","mean","meat","meet","menu",
-    "mere","mike","mile","milk","mill","mind","mine","miss","mode","mood","moon",
-    "more","most","move","much","must","name","navy","near","neck","need","news",
-    "next","nice","nick","nine","none","nope","nose","note","okay","once","only",
-    "onto","open","oral","over","pace","pack","page","paid","pain","pair","palm",
-    "park","part","pass","past","path","peak","pick","pink","pipe","plan","play",
-    "plot","plug","plus","poll","pool","poor","port","post","pour","pull","pure",
-    "push","quiz","race","rail","rain","rank","rare","rate","read","real","rear",
-    "rely","rent","rest","rice","rich","ride","ring","rise","risk","road","rock",
-    "role","roll","roof","room","root","rose","rule","rush","ruth","safe","said",
-    "sake","sale","salt","same","sand","save","seat","seed","seek","seem","seen",
-    "self","sell","send","sent","sept","ship","shop","shot","show","shut","sick",
-    "side","sign","site","size","skin","slip","slow","snow","soft","soil","sold",
-    "sole","some","song","soon","sort","soul","spot","star","stay","step","stop",
-    "such","suit","sure","take","tale","talk","tall","tank","tape","task","team",
-    "tech","tell","tend","term","test","text","than","that","them","then","they",
-    "thin","this","thus","till","time","tiny","told","toll","tone","tony","took",
-    "tool","tour","town","tree","trip","true","tune","turn","twin","type","unit",
-    "upon","used","user","uses","vary","vast","very","vibe","vice","view","vote",
-    "wage","wait","wake","walk","wall","want","ward","warm","wash","wave","ways",
-    "weak","wear","week","well","went","were","west","what","when","whom","wide",
-    "wife","wild","will","wind","wine","wing","wire","wise","wish","with","wood",
-    "word","wore","work","worn","yard","yeah","year","your","zero","zone","zoom",
-}
+def has_unique_letters(word):
+    return len(set(word)) == len(word)
 
-def load_words():
-    text = open_url("./words4.txt").read()
+def _load_word_file(path):
+    text = open_url(path).read()
     return {
         w.strip().lower()
         for w in text.splitlines()
         if len(w.strip()) == WORD_LENGTH and w.strip().isalpha()
     }
 
-VALID_WORDS = load_words()
-PICK_POOL = sorted(COMMON & VALID_WORDS) or sorted(VALID_WORDS) or sorted(COMMON)
+# Single source of truth: same bundled files used by the desktop version.
+ALL_WORDS = _load_word_file("./words4.txt")
+PROPER_NOUNS = _load_word_file("./propernames4.txt")
+VALID_WORDS = ALL_WORDS - PROPER_NOUNS
+
+# Random picks must satisfy game rules: no repeated letters, no proper nouns.
+PICK_POOL = sorted(w for w in VALID_WORDS if has_unique_letters(w))
 
 # Hide loader, show setup
 document.getElementById("loading").hidden = True
@@ -347,6 +402,8 @@ status_el.className = "status ready"
 class State:
     secret = ""
     attempts = 0
+    max_attempts = MAX_ATTEMPTS
+    bonus_granted = False
     active = False
     start_time = 0.0
     final_elapsed = 0
@@ -403,8 +460,8 @@ def hide_message():
     document.getElementById("message").className = "message"
 
 def update_attempts():
-    remaining = MAX_ATTEMPTS - state.attempts
-    document.getElementById("attempts").textContent = f"Attempts remaining: {remaining} / {MAX_ATTEMPTS}"
+    remaining = state.max_attempts - state.attempts
+    document.getElementById("attempts").textContent = f"Attempts remaining: {remaining} / {state.max_attempts}"
 
 def add_history_row(guess, greens, yellows):
     history = document.getElementById("history")
@@ -419,6 +476,19 @@ def add_history_row(guess, greens, yellows):
     history.appendChild(row)
 
 def end_game(won):
+    if not won and not state.bonus_granted:
+        wants_bonus = js_confirm(
+            f"You've used all {state.max_attempts} attempts and didn't crack the word.\n\n"
+            f"Want {BONUS_ATTEMPTS} extra chances?"
+        )
+        if wants_bonus:
+            state.bonus_granted = True
+            state.max_attempts += BONUS_ATTEMPTS
+            update_attempts()
+            hide_message()
+            document.getElementById("guess-input").focus()
+            return
+
     state.active = False
     state.final_elapsed = time.time() - state.start_time
     stop_timer()
@@ -432,6 +502,7 @@ def end_game(won):
             f"You won in {elapsed_str}! Got it in {tries} {'try' if tries == 1 else 'tries'}.",
             "success",
         )
+        fireConfetti(3500)
     else:
         show_message(
             f"Out of attempts after {elapsed_str}. The word was '{state.secret.upper()}'.",
@@ -473,11 +544,25 @@ def on_start(event):
         if len(word) != WORD_LENGTH or not word.isalpha():
             show_message("Please enter a 4-letter word.", "warn")
             return
+        if not has_unique_letters(word):
+            show_message(
+                f"'{word.upper()}' has repeated letters — pick a word with all different letters.",
+                "warn",
+            )
+            return
+        if word in PROPER_NOUNS:
+            show_message(
+                f"'{word.upper()}' looks like a name. Proper nouns aren't allowed.",
+                "warn",
+            )
+            return
         if word not in VALID_WORDS:
             show_message(f"'{word.upper()}' isn't in the dictionary.", "warn")
             return
     state.secret = word
     state.attempts = 0
+    state.max_attempts = MAX_ATTEMPTS
+    state.bonus_granted = False
     state.active = True
     document.getElementById("setup").hidden = True
     document.getElementById("game").hidden = False
@@ -508,6 +593,18 @@ def submit_guess():
     if len(guess) != WORD_LENGTH or not guess.isalpha():
         show_message("Type a 4-letter word.", "warn")
         return
+    if not has_unique_letters(guess):
+        show_message(
+            f"'{guess.upper()}' has repeated letters — pick a word with all different letters.",
+            "warn",
+        )
+        return
+    if guess in PROPER_NOUNS:
+        show_message(
+            f"'{guess.upper()}' is a name. Proper nouns aren't allowed.",
+            "warn",
+        )
+        return
     if guess not in VALID_WORDS:
         show_message(f"'{guess.upper()}' isn't in the dictionary.", "warn")
         return
@@ -519,7 +616,7 @@ def submit_guess():
     update_attempts()
     if guess == state.secret:
         end_game(True)
-    elif state.attempts >= MAX_ATTEMPTS:
+    elif state.attempts >= state.max_attempts:
         end_game(False)
 
 @when("click", "#new-btn")
