@@ -50,12 +50,6 @@
       border-radius: 14px;
       padding: 24px;
     }
-    .visit-count {
-      text-align: center;
-      color: var(--muted);
-      font-size: 13px;
-      margin: -4px 0 20px;
-    }
     .field-label {
       font-size: 13px;
       color: var(--muted);
@@ -245,8 +239,6 @@
     <div id="loading"><span class="spinner"></span>Loading word list...</div>
 
     <section id="setup" class="card" hidden>
-      <div id="visit-count" class="visit-count">Visits on this device: --</div>
-
       <div class="field-label">Choose players</div>
       <div class="modes">
         <label><input type="radio" name="mode" value="single" checked /> Single player (random word)</label>
@@ -383,12 +375,11 @@ import time
 from pyodide.http import open_url
 from pyodide.ffi import create_proxy
 from pyscript import document, when
-from js import setInterval, clearInterval, confirm as js_confirm, fireConfetti, localStorage
+from js import setInterval, clearInterval, confirm as js_confirm, fireConfetti
 
 WORD_LENGTH = 4
 MAX_ATTEMPTS = 8
 BONUS_ATTEMPTS = 2
-VISIT_COUNT_KEY = "parthgame.visitCount"
 
 def has_unique_letters(word):
     return len(set(word)) == len(word)
@@ -425,22 +416,12 @@ status_el.textContent = (
 )
 status_el.className = "status ready"
 
-def update_visit_count():
-    el = document.getElementById("visit-count")
-    try:
-        visits = int(localStorage.getItem(VISIT_COUNT_KEY) or "0") + 1
-        localStorage.setItem(VISIT_COUNT_KEY, str(visits))
-        el.textContent = f"Visits on this device: {visits:,}"
-    except Exception:
-        el.textContent = "Visits on this device: unavailable"
-
-update_visit_count()
-
 class State:
     secret = ""
     attempts = 0
     max_attempts = MAX_ATTEMPTS
     bonus_granted = False
+    bonus_allowed = True
     active = False
     start_time = 0.0
     final_elapsed = 0
@@ -513,7 +494,7 @@ def add_history_row(guess, greens, yellows):
     history.appendChild(row)
 
 def end_game(won):
-    if not won and not state.bonus_granted:
+    if not won and not state.bonus_granted and state.bonus_allowed:
         wants_bonus = js_confirm(
             f"You've used all {state.max_attempts} attempts and didn't crack the word.\n\n"
             f"Want {BONUS_ATTEMPTS} extra chances?"
@@ -573,6 +554,7 @@ def on_guess_input(event):
 @when("click", "#start-btn")
 def on_start(event):
     mode = document.querySelector("input[name=mode]:checked").value
+    bonus_allowed = True
     if mode == "single":
         difficulty = document.querySelector("input[name=difficulty]:checked").value
         pick_pool = PICK_POOLS.get(difficulty, EASY_PICK_POOL)
@@ -580,6 +562,7 @@ def on_start(event):
             show_message("Selected word list is empty.", "fail")
             return
         word = random.choice(pick_pool)
+        bonus_allowed = difficulty != "easy"
     else:
         word = document.getElementById("secret-input").value.strip().lower()
         if len(word) != WORD_LENGTH or not word.isalpha():
@@ -604,6 +587,7 @@ def on_start(event):
     state.attempts = 0
     state.max_attempts = MAX_ATTEMPTS
     state.bonus_granted = False
+    state.bonus_allowed = bonus_allowed
     state.active = True
     document.getElementById("setup").hidden = True
     document.getElementById("game").hidden = False

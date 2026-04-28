@@ -8,9 +8,9 @@ A small Wordle-style guessing game that runs entirely in the browser via [PyScri
   - **Single player** — the game picks a random 4-letter word for you.
   - **Two players** — one person sets a secret 4-letter word, the other guesses.
 - In single player, choose a difficulty:
-  - **Easy** — picks from about 700 common English words.
+  - **Easy** — picks from about 700 common English words, with no extra chances.
   - **Hard** — picks from the full rule-filtered word list.
-- The guesser has **8 attempts**. If they run out, the game offers **2 extra chances** (one-time bonus).
+- The guesser has **8 attempts**. In hard mode and two-player mode, running out offers **2 extra chances** (one-time bonus).
 - After every guess two numbers appear next to the guess:
   - **GREEN** — letters in the right spot.
   - **YELLOW** — letters that exist in the word but in the wrong spot (each secret letter is consumed at most once, standard Wordle rules).
