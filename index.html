@@ -50,6 +50,12 @@
       border-radius: 14px;
       padding: 24px;
     }
+    .visit-count {
+      text-align: center;
+      color: var(--muted);
+      font-size: 13px;
+      margin: -4px 0 20px;
+    }
     .field-label {
       font-size: 13px;
       color: var(--muted);
@@ -239,10 +245,20 @@
     <div id="loading"><span class="spinner"></span>Loading word list...</div>
 
     <section id="setup" class="card" hidden>
-      <div class="field-label">Choose a mode</div>
+      <div id="visit-count" class="visit-count">Visits on this device: --</div>
+
+      <div class="field-label">Choose players</div>
       <div class="modes">
         <label><input type="radio" name="mode" value="single" checked /> Single player (random word)</label>
         <label><input type="radio" name="mode" value="two" /> Two players (I'll set the word)</label>
+      </div>
+
+      <div id="difficulty-row">
+        <div class="field-label">Choose difficulty</div>
+        <div class="modes">
+          <label><input type="radio" name="difficulty" value="easy" checked /> Easy (common words)</label>
+          <label><input type="radio" name="difficulty" value="hard" /> Hard (full word list)</label>
+        </div>
       </div>
 
       <div id="secret-row" hidden>
@@ -255,7 +271,7 @@
 
       <div class="help">
         <b>How to play:</b><br />
-        Pick a mode and hit Start. You get 8 guesses. After each guess we show two numbers — green for letters in the right spot, yellow for letters in the word but wrong spot.
+        Pick players, choose a difficulty for single player, and hit Start. You get 8 guesses. After each guess we show two numbers — green for letters in the right spot, yellow for letters in the word but wrong spot.
         <br /><br />
         <b>Word rules:</b> all 4 letters must be different (e.g. <i>BEET</i> isn't allowed), and no proper nouns (names, places).
       </div>
@@ -367,11 +383,12 @@ import time
 from pyodide.http import open_url
 from pyodide.ffi import create_proxy
 from pyscript import document, when
-from js import setInterval, clearInterval, confirm as js_confirm, fireConfetti
+from js import setInterval, clearInterval, confirm as js_confirm, fireConfetti, localStorage
 
 WORD_LENGTH = 4
 MAX_ATTEMPTS = 8
 BONUS_ATTEMPTS = 2
+VISIT_COUNT_KEY = "parthgame.visitCount"
 
 def has_unique_letters(word):
     return len(set(word)) == len(word)
@@ -386,18 +403,38 @@ def _load_word_file(path):
 
 # Single source of truth: same bundled files used by the desktop version.
 ALL_WORDS = _load_word_file("./words4.txt")
+EASY_WORDS = _load_word_file("./easywords4.txt")
 PROPER_NOUNS = _load_word_file("./propernames4.txt")
 VALID_WORDS = ALL_WORDS - PROPER_NOUNS
 
 # Random picks must satisfy game rules: no repeated letters, no proper nouns.
-PICK_POOL = sorted(w for w in VALID_WORDS if has_unique_letters(w))
+HARD_PICK_POOL = sorted(w for w in VALID_WORDS if has_unique_letters(w))
+EASY_PICK_POOL = sorted(w for w in (EASY_WORDS & VALID_WORDS) if has_unique_letters(w))
+PICK_POOLS = {
+    "easy": EASY_PICK_POOL,
+    "hard": HARD_PICK_POOL,
+}
 
 # Hide loader, show setup
 document.getElementById("loading").hidden = True
 document.getElementById("setup").hidden = False
 status_el = document.getElementById("status")
-status_el.textContent = f"Word list ready ({len(VALID_WORDS):,} valid 4-letter words)."
+status_el.textContent = (
+    f"Word lists ready ({len(EASY_PICK_POOL):,} easy answers, "
+    f"{len(HARD_PICK_POOL):,} hard answers)."
+)
 status_el.className = "status ready"
+
+def update_visit_count():
+    el = document.getElementById("visit-count")
+    try:
+        visits = int(localStorage.getItem(VISIT_COUNT_KEY) or "0") + 1
+        localStorage.setItem(VISIT_COUNT_KEY, str(visits))
+        el.textContent = f"Visits on this device: {visits:,}"
+    except Exception:
+        el.textContent = "Visits on this device: unavailable"
+
+update_visit_count()
 
 class State:
     secret = ""
@@ -515,7 +552,9 @@ def clean_input(value):
 @when("change", "input[name=mode]")
 def on_mode_change(event):
     mode = document.querySelector("input[name=mode]:checked").value
-    document.getElementById("secret-row").hidden = mode == "single"
+    is_single_player = mode == "single"
+    document.getElementById("secret-row").hidden = is_single_player
+    document.getElementById("difficulty-row").hidden = not is_single_player
 
 @when("input", "#secret-input")
 def on_secret_input(event):
@@ -535,10 +574,12 @@ def on_guess_input(event):
 def on_start(event):
     mode = document.querySelector("input[name=mode]:checked").value
     if mode == "single":
-        if not PICK_POOL:
-            show_message("Word list is empty.", "fail")
+        difficulty = document.querySelector("input[name=difficulty]:checked").value
+        pick_pool = PICK_POOLS.get(difficulty, EASY_PICK_POOL)
+        if not pick_pool:
+            show_message("Selected word list is empty.", "fail")
             return
-        word = random.choice(PICK_POOL)
+        word = random.choice(pick_pool)
     else:
         word = document.getElementById("secret-input").value.strip().lower()
         if len(word) != WORD_LENGTH or not word.isalpha():

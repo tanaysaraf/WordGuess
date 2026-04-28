@@ -7,6 +7,9 @@ A small Wordle-style guessing game that runs entirely in the browser via [PyScri
 - Pick a mode:
   - **Single player** — the game picks a random 4-letter word for you.
   - **Two players** — one person sets a secret 4-letter word, the other guesses.
+- In single player, choose a difficulty:
+  - **Easy** — picks from about 700 common English words.
+  - **Hard** — picks from the full rule-filtered word list.
 - The guesser has **8 attempts**. If they run out, the game offers **2 extra chances** (one-time bonus).
 - After every guess two numbers appear next to the guess:
   - **GREEN** — letters in the right spot.
@@ -54,6 +57,7 @@ That URL works on any device with a modern browser, fully free, no servers.
 | File | Purpose |
 |------|---------|
 | `index.html` | The whole app — HTML, CSS, PyScript, and the confetti animation. |
+| `easywords4.txt` | Curated easy-answer wordlist for single-player easy mode. |
 | `words4.txt` | Bundled 4-letter English wordlist. |
 | `propernames4.txt` | Bundled 4-letter proper-noun blocklist. |
 | `.nojekyll` | Tells GitHub Pages to serve files as-is. |
